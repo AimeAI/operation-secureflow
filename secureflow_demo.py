@@ -7,12 +7,14 @@ from sklearn.ensemble import IsolationForest
 from datetime import datetime, timedelta
 import random
 import time
+from fpdf import FPDF
+import base64
 
 # ==========================================
 # CONFIGURATION & PAGE SETUP
 # ==========================================
 st.set_page_config(
-    page_title="Operation SecureFlow | PEO Digital",
+    page_title="Operation SecureFlow | P-1071",
     page_icon="⚓",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,8 +26,78 @@ st.markdown("""
     .main { background-color: #0e1117; color: #ffffff; }
     .stAlert { background-color: #262730; border: 1px solid #4b4b4b; }
     .metric-card { background-color: #262730; padding: 20px; border-radius: 10px; border: 1px solid #333; }
+    div[data-testid="stSidebarNav"] {display: none;}
     </style>
     """, unsafe_allow_html=True)
+
+# ==========================================
+# DATA PERSISTENCE (Fixes Jitter)
+# ==========================================
+def init_session_state():
+    """Initialize session state to prevent data regeneration on each interaction."""
+    if 'traffic_data' not in st.session_state:
+        # Generate data once
+        n_samples = 300
+        data = {
+            'timestamp': [datetime.now() - timedelta(minutes=i) for i in range(n_samples)],
+            'packet_size': np.random.normal(500, 50, n_samples),
+            'latency_ms': np.random.normal(20, 5, n_samples),
+            'requests_per_sec': np.random.normal(100, 10, n_samples)
+        }
+        df = pd.DataFrame(data)
+
+        # Inject Anomalies
+        indices = np.random.choice(n_samples, size=15, replace=False)
+        df.loc[indices, 'packet_size'] = np.random.normal(3000, 200, 15)
+        df.loc[indices, 'latency_ms'] = np.random.normal(200, 50, 15)
+
+        # Train Model Once
+        model = IsolationForest(contamination=0.05, random_state=42)
+        features = ['packet_size', 'latency_ms']
+        df['anomaly'] = model.fit_predict(df[features])
+        df['status'] = df['anomaly'].apply(lambda x: 'Normal' if x == 1 else 'THREAT DETECTED')
+
+        st.session_state.traffic_data = df
+
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+
+# ==========================================
+# PDF GENERATOR
+# ==========================================
+def create_pdf(report_type):
+    """Generate official DoD-style PDF report."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Courier", size=12)
+
+    # Header
+    pdf.cell(200, 10, txt="UNCLASSIFIED // FOUO", ln=1, align='C')
+    pdf.cell(200, 10, txt=f"SECUREFLOW AUDIT: {report_type.upper()}", ln=1, align='C')
+    pdf.cell(200, 10, txt=f"DATE: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Z", ln=1, align='C')
+    pdf.line(10, 40, 200, 40)
+    pdf.ln(20)
+
+    # Body
+    pdf.set_font("Courier", size=10)
+    content = [
+        "UNIT: USS EXAMPLE (DDG-00)",
+        "PILOT ID: P-1071",
+        "------------------------------------------------",
+        "AUDIT RESULTS:",
+        "[ PASS ] FIPS 140-2 ENCRYPTION STANDARDS",
+        "[ PASS ] MULTI-FACTOR AUTHENTICATION",
+        "[ PASS ] LOG RETENTION POLICY",
+        "[ FAIL ] PORT SECURITY (802.1x) - REMEDIATION REQ",
+        "------------------------------------------------",
+        "AUTOMATED GENERATION via OPERATION SECUREFLOW",
+        "DO NOT DISTRIBUTE WITHOUT AUTHORIZATION"
+    ]
+
+    for line in content:
+        pdf.cell(200, 10, txt=line, ln=1, align='L')
+
+    return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
 # CORE COMPONENT 1: AI SECURITY MONITORING
@@ -52,48 +124,41 @@ def run_security_module():
     st.header("🛡️ A. AI-Powered Security Monitoring")
     st.caption("Real-time anomaly detection using Isolation Forest (Unsupervised Learning)")
 
-    # 1. Data Simulation
-    df = generate_network_traffic()
+    # Use persistent data from session state
+    df = st.session_state.traffic_data
 
-    # 2. AI Model Training (Isolation Forest)
-    # We use 'packet_size' and 'latency_ms' as features
-    model = IsolationForest(contamination=0.05, random_state=42)
-    features = ['packet_size', 'latency_ms']
-    df['anomaly'] = model.fit_predict(df[features])
-    df['status'] = df['anomaly'].apply(lambda x: 'Normal' if x == 1 else 'THREAT DETECTED')
-
-    # 3. Visualization
+    # Visualization
     col1, col2 = st.columns([3, 1])
 
     with col1:
         fig = px.scatter(df, x='timestamp', y='packet_size', color='status',
                          color_discrete_map={'Normal': '#00CC96', 'THREAT DETECTED': '#EF553B'},
-                         title="Live Network Traffic Analysis",
+                         title="Network Traffic Analysis (Packet Size vs Time)",
                          labels={'packet_size': 'Packet Size (bytes)'})
+        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Live Alerts")
+        st.subheader("Active Threats")
         threats = df[df['status'] == 'THREAT DETECTED']
         if not threats.empty:
-            for _, row in threats.tail(5).iterrows():
-                st.error(f"🚨 {row['timestamp'].strftime('%H:%M:%S')} | High Latency: {row['latency_ms']:.1f}ms")
+            for _, row in threats.tail(4).iterrows():
+                st.error(f"🚨 {row['timestamp'].strftime('%H:%M:%S')}Z\nHigh Latency: {row['latency_ms']:.0f}ms")
         else:
-            st.success("System Secure. No active threats.")
+            st.success("System Secure.")
 
 # ==========================================
 # CORE COMPONENT 2: PERFORMANCE ANALYTICS
 # ==========================================
 def run_performance_module():
-    st.header("📊 B. Performance Analytics Dashboard")
+    st.header("📊 B. Performance Analytics")
     st.caption("Predictive modeling for network degradation")
 
-    # Simulated Metrics
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("System Uptime", "99.98%", "+0.02%")
+    col1.metric("System Uptime", "99.98%", "+0.01%")
     col2.metric("Avg Latency", "24ms", "-2ms")
-    col3.metric("Bandwidth Usage", "4.2 Gbps", "Stable")
-    col4.metric("Active Nodes", "1,240", "All Online")
+    col3.metric("Bandwidth", "4.2 Gbps", "Stable")
+    col4.metric("Active Nodes", "1,240", "Online")
 
     # Predictive Graph (Forecast)
     dates = pd.date_range(start=datetime.now(), periods=24, freq='H')
@@ -102,31 +167,30 @@ def run_performance_module():
     df_perf = pd.DataFrame({'Time': dates, 'Predicted CPU Load (%)': predicted_load})
 
     fig = px.line(df_perf, x='Time', y='Predicted CPU Load (%)', markers=True,
-                  title="24-Hour Performance Forecast (Predictive Analytics)")
+                  title="24-Hour Load Forecast")
 
     # Add a threshold line
-    fig.add_hline(y=85, line_dash="dot", annotation_text="Critical Threshold", annotation_position="bottom right", line_color="red")
+    fig.add_hline(y=85, line_dash="dot", annotation_text="Critical Threshold", line_color="red")
+    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
 
     st.plotly_chart(fig, use_container_width=True)
 
-    with st.expander("View Actionable Recommendations"):
-        st.info("💡 **Optimization:** Re-route Traffic Node B-7 to reduce latency spike predicted at 14:00.")
-        st.info("💡 **Maintenance:** Schedule patch for Server Cluster Alpha during 03:00 low-traffic window.")
+    st.info("💡 **AI Recommendation:** Re-route Traffic Node B-7 to reduce latency spike predicted at 1400Z.")
 
 # ==========================================
 # CORE COMPONENT 3: AUTOMATED COMPLIANCE
 # ==========================================
 def run_compliance_module():
-    st.header("✅ C. Automated Compliance & Reporting")
-    st.caption("Automated DoD 8500.01 & NIST 800-53 Checklists")
+    st.header("✅ C. Automated Compliance Engine")
+    st.caption("Automated DoD 8500.01 & NIST 800-53 Validation")
 
     # Mock Compliance Checks
     compliance_checks = {
-        "Encryption Standards (FIPS 140-2)": True,
-        "Multi-Factor Authentication (MFA) Active": True,
-        "Patch Management Status": True,
+        "FIPS 140-2 Encryption": True,
+        "MFA Active": True,
+        "Patch Management": True,
         "Port Security (802.1x)": False,
-        "Log Retention Policy": True
+        "Log Retention": True
     }
 
     col1, col2 = st.columns([1, 1])
@@ -140,59 +204,61 @@ def run_compliance_module():
                 st.error(f"❌ {check}: NON-COMPLIANT - Action Required")
 
     with col2:
-        st.subheader("Report Generation")
-        st.write("Generate audit-ready PDF reports for command review.")
+        st.subheader("Official Reporting")
+        report_type = st.selectbox("Report Type", ["Daily Security Summary", "Full Audit", "Incident Log"])
 
-        report_type = st.selectbox("Select Report Type", ["Daily Security Summary", "Compliance Audit (Full)", "Incident Response Log"])
+        if st.button("Generate Official PDF"):
+            with st.spinner("Querying Audit Logs & Compiling PDF..."):
+                time.sleep(1.5)
 
-        if st.button("Generate Report"):
-            with st.spinner("Gathering data..."):
-                time.sleep(1.5) # Simulate processing
-            st.balloons()
-            st.success(f"📄 **{report_type}** generated successfully. Sent to Command Server.")
-            st.download_button("Download Copy (Mock)", data="Mock Report Data", file_name="report.txt")
+            pdf_bytes = create_pdf(report_type)
+            b64 = base64.b64encode(pdf_bytes).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="SECUREFLOW_AUDIT_{int(time.time())}.pdf" style="background-color:#00FF41; color:black; padding:10px; text-decoration:none; border-radius:5px; font-weight:bold;">📥 DOWNLOAD SIGNED PDF</a>'
+            st.markdown(href, unsafe_allow_html=True)
+            st.success("Report generated and signed.")
 
 # ==========================================
 # CORE COMPONENT 4: IT SERVICE PORTAL
 # ==========================================
 def run_service_portal():
-    st.header("⚓ D. User-Centric IT Service Portal")
-    st.caption("Self-service interface for Sailors & Marines")
+    st.header("⚓ D. IT Service Portal")
+    st.caption("AI-Assisted Tier 1 Support")
 
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("AI Support Assistant")
-        st.markdown("""
-        **Chat with SecureFlow Bot** (Simulating Tier 1 Support)
-        *Try asking: 'Reset my password', 'Internet is slow', or 'Check ticket status'*
-        """)
-
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
-        # Display chat history
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # Chat Input
-        if prompt := st.chat_input("Type your IT request here..."):
+        if prompt := st.chat_input("Describe your issue (e.g., 'Reset CAC PIN')..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # Simple Logic for Demo
-            response = ""
-            prompt_lower = prompt.lower()
-            if "password" in prompt_lower:
-                response = "I can help with that. Please navigate to the **Identity Management Tab** to reset your CAC PIN or network password securely."
-            elif "slow" in prompt_lower or "internet" in prompt_lower:
-                response = "I've detected high latency in your sector. A ticket (TKT-492) has been auto-generated. Switching your endpoint to a backup gateway..."
-            elif "ticket" in prompt_lower:
-                response = "You have 1 active ticket: **TKT-492** (Network Lag). Status: *In Progress*."
+            # Enhanced logic to handle more variations
+            response = "Request acknowledged. "
+            p_lower = prompt.lower()
+
+            # Password/PIN reset variations
+            if any(keyword in p_lower for keyword in ["password", "pin", "locked", "account", "login", "cac"]):
+                response += "I've initiated the secure reset protocol. Please check your secondary device for 2FA verification."
+
+            # Network/performance issues
+            elif any(keyword in p_lower for keyword in ["slow", "lag", "internet", "network", "connection", "wifi", "down", "outage"]):
+                response += "Network diagnostics show high latency at your node. I have auto-generated Ticket #9924 for re-routing."
+
+            # Software/installation
+            elif any(keyword in p_lower for keyword in ["software", "install", "application", "program", "download"]):
+                response += "Software request logged. I'm verifying your authorization level and will push the installer to your device within 5 minutes."
+
+            # Ticket status
+            elif any(keyword in p_lower for keyword in ["ticket", "status", "request"]):
+                response += "Your active tickets: #9924 (Network Routing - In Progress). Estimated resolution: 15 minutes."
+
+            # Default fallback
             else:
-                response = "I'm routing this request to the Help Desk. Estimated wait time: 2 minutes."
+                response += "I am routing this request to the Watch Officer. Estimated wait time: 4 minutes."
 
             time.sleep(0.5)
             st.session_state.messages.append({"role": "assistant", "content": response})
@@ -202,43 +268,32 @@ def run_service_portal():
     with col2:
         st.subheader("Quick Actions")
         st.button("🔑 Reset CAC PIN", use_container_width=True)
-        st.button("📥 Install Software", use_container_width=True)
         st.button("📡 Report Outage", use_container_width=True)
-
-        st.info("Latest Notification: Maintenance scheduled for Sunday 0200Z.")
 
 # ==========================================
 # MAIN NAVIGATION
 # ==========================================
 def main():
-    st.sidebar.title("SecureFlow v1.0")
-    st.sidebar.markdown("**Operation SecureFlow**\n\n*Ready for PEO Digital Pilot*")
+    init_session_state()
 
-    menu = st.sidebar.radio(
-        "Navigation",
-        ["Dashboard Home", "Security Monitor", "Performance Analytics", "Compliance Engine", "IT Service Portal"]
-    )
-
-    st.sidebar.markdown("---")
-    st.sidebar.write("Status: **ONLINE** 🟢")
-    st.sidebar.write("Unit: **USS Example (DDG-00)**")
+    st.sidebar.title("SecureFlow")
+    st.sidebar.info("Pilot ID: **P-1071**")
+    menu = st.sidebar.radio("Module", ["Dashboard Home", "Security Monitor", "Performance Analytics", "Compliance Engine", "IT Service Portal"])
+    st.sidebar.divider()
+    st.sidebar.caption("Status: **ONLINE**")
+    st.sidebar.caption("Unit: **USS EXAMPLE**")
 
     if menu == "Dashboard Home":
-        st.title("Operation SecureFlow Command Center")
-        st.markdown("""
-        **Objective:** Enhance cybersecurity, network performance, and operational resilience for the Navy and Marine Corps.
+        st.title("Operation SecureFlow")
+        st.warning("⚠️ **SIMULATION MODE:** Displaying synthetic telemetry for Pilot Demo P-1071.")
 
-        ### 🚀 Live Pilot Overview
-        Select a module from the sidebar to begin the demonstration.
-        """)
-
-        # Summary Metrics
         col1, col2, col3 = st.columns(3)
-        col1.metric("Active Threats Blocked", "14", "+2 today")
-        col2.metric("Network Health Score", "94/100", "Optimal")
-        col3.metric("Open Support Tickets", "8", "-5 from yesterday")
+        col1.metric("Threats Blocked", "14", "+2")
+        col2.metric("Health Score", "94/100", "Optimal")
+        col3.metric("Open Tickets", "8", "-5")
 
-        st.image("https://images.unsplash.com/photo-1558494949-efc527e73126?auto=format&fit=crop&q=80&w=1000", caption="SecureFlow Network Topology Visualization", use_column_width=True)
+        st.markdown("### Mission Objective")
+        st.markdown("Demonstrate **AI-driven automation** for Naval IT infrastructure to reduce manual workload and increase operational readiness.")
 
     elif menu == "Security Monitor":
         run_security_module()
