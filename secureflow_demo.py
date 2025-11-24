@@ -124,10 +124,63 @@ def run_security_module():
     st.header("🛡️ A. AI-Powered Security Monitoring")
     st.caption("Real-time anomaly detection using Isolation Forest (Unsupervised Learning)")
 
-    # Use persistent data from session state
-    df = st.session_state.traffic_data
+    # Data Source Selection
+    mode = st.radio(
+        "Data Source",
+        ["Synthetic Telemetry (Demo)", "Upload Network Log (CSV)"],
+        horizontal=True
+    )
 
-    # Visualization
+    df = pd.DataFrame()
+
+    # MODE A: SYNTHETIC DATA (Demo Mode)
+    if mode == "Synthetic Telemetry (Demo)":
+        st.caption("📡 STATUS: Using simulated network traffic patterns")
+        df = st.session_state.traffic_data
+
+    # MODE B: CSV UPLOAD (Live Data Ingestion)
+    else:
+        st.caption("📂 STATUS: Ready for external data ingestion")
+        uploaded_file = st.file_uploader("Upload Network Log (.csv format)", type=['csv'])
+
+        if uploaded_file is not None:
+            try:
+                # Read uploaded CSV
+                df = pd.read_csv(uploaded_file)
+
+                # Validate required columns
+                required = ['packet_size', 'latency_ms']
+                if not all(col in df.columns for col in required):
+                    st.warning(f"⚠️ Expected columns: {', '.join(required)}. Auto-mapping available columns...")
+                    # Fallback to demo data if columns don't match
+                    df = st.session_state.traffic_data
+                else:
+                    # Generate timestamps if not present
+                    if 'timestamp' not in df.columns:
+                        df['timestamp'] = [datetime.now() - timedelta(minutes=i) for i in range(len(df))]
+                    else:
+                        # Try to parse timestamp column
+                        try:
+                            df['timestamp'] = pd.to_datetime(df['timestamp'])
+                        except:
+                            df['timestamp'] = [datetime.now() - timedelta(minutes=i) for i in range(len(df))]
+
+                    # Run anomaly detection on uploaded data
+                    model = IsolationForest(contamination=0.05, random_state=42)
+                    df['anomaly'] = model.fit_predict(df[['packet_size', 'latency_ms']])
+                    df['status'] = df['anomaly'].apply(lambda x: 'Normal' if x == 1 else 'THREAT DETECTED')
+
+                    st.success(f"✅ Ingested {len(df)} data points. Running inference...")
+
+            except Exception as e:
+                st.error(f"Error parsing file: {e}")
+                st.info("Reverting to demo mode. Ensure CSV has 'packet_size' and 'latency_ms' columns.")
+                return
+        else:
+            st.info("⬆️ Upload a CSV file to begin analysis")
+            return
+
+    # Visualization (works for both modes)
     col1, col2 = st.columns([3, 1])
 
     with col1:
@@ -143,7 +196,8 @@ def run_security_module():
         threats = df[df['status'] == 'THREAT DETECTED']
         if not threats.empty:
             for _, row in threats.tail(4).iterrows():
-                st.error(f"🚨 {row['timestamp'].strftime('%H:%M:%S')}Z\nHigh Latency: {row['latency_ms']:.0f}ms")
+                ts = row['timestamp'].strftime('%H:%M:%S') if isinstance(row['timestamp'], datetime) else str(row['timestamp'])
+                st.error(f"🚨 {ts}Z\nHigh Latency: {row['latency_ms']:.0f}ms")
         else:
             st.success("System Secure.")
 
