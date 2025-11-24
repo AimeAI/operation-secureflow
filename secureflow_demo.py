@@ -122,56 +122,55 @@ def generate_network_traffic(n_samples=200):
 
 def run_security_module():
     st.header("🛡️ A. AI-Powered Security Monitoring")
-    st.caption("Real-time anomaly detection using Isolation Forest (Unsupervised Learning)")
+    st.caption("Real-time anomaly detection & Automated Containment")
 
-    # Data Source Selection
-    mode = st.radio(
-        "Data Source",
-        ["Synthetic Telemetry (Demo)", "Upload Network Log (CSV)"],
-        horizontal=True
-    )
+    # 1. DATA SOURCE & CONTROLS
+    col_ctrl1, col_ctrl2 = st.columns([2, 1])
+    with col_ctrl1:
+        mode = st.radio(
+            "Telemetry Source",
+            ["Synthetic Telemetry (Demo)", "Upload Network Log (CSV)"],
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
+    with col_ctrl2:
+        # THE KILL SWITCH
+        auto_quarantine = st.toggle(
+            "🔒 ENABLE AUTO-QUARANTINE",
+            value=False,
+            help="Automatically isolate detected threats from main traffic flow"
+        )
 
     df = pd.DataFrame()
 
-    # MODE A: SYNTHETIC DATA (Demo Mode)
+    # DATA INGESTION LOGIC
     if mode == "Synthetic Telemetry (Demo)":
-        st.caption("📡 STATUS: Using simulated network traffic patterns")
+        if 'traffic_data' not in st.session_state:
+            st.session_state.traffic_data = generate_network_traffic()
         df = st.session_state.traffic_data
-
-    # MODE B: CSV UPLOAD (Live Data Ingestion)
     else:
-        st.caption("📂 STATUS: Ready for external data ingestion")
-        uploaded_file = st.file_uploader("Upload Network Log (.csv format)", type=['csv'])
-
+        uploaded_file = st.file_uploader("Upload Network Log (.csv)", type=['csv'])
         if uploaded_file is not None:
             try:
-                # Read uploaded CSV
                 df = pd.read_csv(uploaded_file)
-
-                # Validate required columns
                 required = ['packet_size', 'latency_ms']
                 if not all(col in df.columns for col in required):
-                    st.warning(f"⚠️ Expected columns: {', '.join(required)}. Auto-mapping available columns...")
-                    # Fallback to demo data if columns don't match
+                    st.warning("⚠️ Data Mismatch. Using synthetic fallback.")
                     df = st.session_state.traffic_data
                 else:
-                    # Generate timestamps if not present
                     if 'timestamp' not in df.columns:
                         df['timestamp'] = [datetime.now() - timedelta(minutes=i) for i in range(len(df))]
                     else:
-                        # Try to parse timestamp column
                         try:
                             df['timestamp'] = pd.to_datetime(df['timestamp'])
                         except:
                             df['timestamp'] = [datetime.now() - timedelta(minutes=i) for i in range(len(df))]
 
-                    # Run anomaly detection on uploaded data
                     model = IsolationForest(contamination=0.05, random_state=42)
                     df['anomaly'] = model.fit_predict(df[['packet_size', 'latency_ms']])
                     df['status'] = df['anomaly'].apply(lambda x: 'Normal' if x == 1 else 'THREAT DETECTED')
-
                     st.success(f"✅ Ingested {len(df)} data points. Running inference...")
-
             except Exception as e:
                 st.error(f"Error parsing file: {e}")
                 st.info("Reverting to demo mode. Ensure CSV has 'packet_size' and 'latency_ms' columns.")
@@ -180,26 +179,51 @@ def run_security_module():
             st.info("⬆️ Upload a CSV file to begin analysis")
             return
 
-    # Visualization (works for both modes)
+    # 2. QUARANTINE LOGIC
+    threats = df[df['status'] == 'THREAT DETECTED']
+    clean_traffic = df[df['status'] == 'Normal']
+
+    display_df = df  # Default to showing everything
+
+    if auto_quarantine:
+        # If Quarantine is ON, we only show CLEAN traffic in the main graph
+        display_df = clean_traffic
+
+        # Show the "Effect" of the quarantine
+        st.success(f"✅ CONTAINMENT ACTIVE. {len(threats)} Malicious Packets Isolated from Mainflow.")
+
+    # 3. VISUALIZATION
     col1, col2 = st.columns([3, 1])
 
     with col1:
-        fig = px.scatter(df, x='timestamp', y='packet_size', color='status',
+        title_text = "Network Traffic (CLEAN STREAM)" if auto_quarantine else "Network Traffic (UNFILTERED)"
+
+        fig = px.scatter(display_df, x='timestamp', y='packet_size', color='status',
                          color_discrete_map={'Normal': '#00CC96', 'THREAT DETECTED': '#EF553B'},
-                         title="Network Traffic Analysis (Packet Size vs Time)",
+                         title=title_text,
                          labels={'packet_size': 'Packet Size (bytes)'})
         fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.subheader("Active Threats")
-        threats = df[df['status'] == 'THREAT DETECTED']
-        if not threats.empty:
-            for _, row in threats.tail(4).iterrows():
-                ts = row['timestamp'].strftime('%H:%M:%S') if isinstance(row['timestamp'], datetime) else str(row['timestamp'])
-                st.error(f"🚨 {ts}Z\nHigh Latency: {row['latency_ms']:.0f}ms")
+        if auto_quarantine:
+            st.subheader("🚫 Quarantine Zone")
+            if not threats.empty:
+                for _, row in threats.tail(5).iterrows():
+                    ts = row['timestamp'].strftime('%H:%M:%S') if isinstance(row['timestamp'], datetime) else str(row['timestamp'])
+                    st.warning(f"LOCKED: {ts}Z\nSize: {row['packet_size']:.0f}b | Latency: {row['latency_ms']:.0f}ms")
+                if len(threats) > 5:
+                    st.caption(f"...and {len(threats)-5} more blocked.")
+            else:
+                st.write("No active threats captured.")
         else:
-            st.success("System Secure.")
+            st.subheader("Live Alerts")
+            if not threats.empty:
+                for _, row in threats.tail(5).iterrows():
+                    ts = row['timestamp'].strftime('%H:%M:%S') if isinstance(row['timestamp'], datetime) else str(row['timestamp'])
+                    st.error(f"🚨 DETECTED: {ts}Z\nAnomaly in Sector 7")
+            else:
+                st.success("System Secure.")
 
 # ==========================================
 # CORE COMPONENT 2: PERFORMANCE ANALYTICS
