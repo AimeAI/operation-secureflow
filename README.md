@@ -15,6 +15,8 @@
 
 ## 🛠 Key Capabilities
 1.  **🛡️ AI Security Monitor:** Real-time anomaly detection (Isolation Forest) for network traffic.
+    *   *Capability:* Dual-mode operation (Synthetic Training or Live CSV Ingestion).
+    *   *Input:* Accepts standard Syslog/NetFlow CSV exports.
 2.  **📊 Performance Analytics:** Predictive modeling for system load and health.
 3.  **✅ Compliance Engine:** Automated checking against DoD 8500.01 & NIST standards.
 4.  **🤖 Service Portal:** AI-assisted Help Desk for rapid issue resolution.

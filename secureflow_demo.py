@@ -337,6 +337,19 @@ def main():
     st.sidebar.caption("Status: **ONLINE**")
     st.sidebar.caption("Unit: **USS EXAMPLE**")
 
+    # Air-Gap Export Capability
+    st.sidebar.markdown("---")
+    st.sidebar.caption("🔐 **AIR-GAP EXPORT**")
+    with open(__file__, "rb") as file:
+        st.sidebar.download_button(
+            label="Download Source Protocol",
+            data=file,
+            file_name="secureflow_core_v1.py",
+            mime="text/x-python",
+            help="Export system core for offline SIPRNet deployment.",
+            use_container_width=True
+        )
+
     if menu == "Dashboard Home":
         st.title("Operation SecureFlow")
         st.warning("⚠️ **SIMULATION MODE:** Displaying synthetic telemetry for Pilot Demo P-1071.")
