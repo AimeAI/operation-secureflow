@@ -290,31 +290,64 @@ def run_service_portal():
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # Enhanced logic to handle more variations
-            response = "Request acknowledged. "
+            # Upgraded AI-Assisted Logic with Randomization
+            response = ""
             p_lower = prompt.lower()
 
-            # Password/PIN reset variations
-            if any(keyword in p_lower for keyword in ["password", "pin", "locked", "account", "login", "cac"]):
-                response += "I've initiated the secure reset protocol. Please check your secondary device for 2FA verification."
+            # Dynamic Ticket ID generation to prevent repetition
+            ticket_id = f"TKT-{random.randint(1000, 9999)}"
 
-            # Network/performance issues
-            elif any(keyword in p_lower for keyword in ["slow", "lag", "internet", "network", "connection", "wifi", "down", "outage"]):
-                response += "Network diagnostics show high latency at your node. I have auto-generated Ticket #9924 for re-routing."
+            # 1. Latency / Network Issues
+            if any(k in p_lower for k in ["slow", "lag", "internet", "latency", "down", "network", "connection", "wifi", "outage"]):
+                options = [
+                    f"I've detected packet loss at your local node. Auto-generating **{ticket_id}** for priority re-routing.",
+                    f"Network diagnostics indicate high traffic load. Switching your endpoint to the backup gateway. Ref: **{ticket_id}**.",
+                    f"Acknowledged. Throughput is below baseline. I have flagged this for the Watch Officer. Ticket **{ticket_id}** created."
+                ]
+                response = random.choice(options)
 
-            # Software/installation
-            elif any(keyword in p_lower for keyword in ["software", "install", "application", "program", "download"]):
-                response += "Software request logged. I'm verifying your authorization level and will push the installer to your device within 5 minutes."
+            # 2. Access / Password Issues
+            elif any(k in p_lower for k in ["password", "pin", "login", "access", "cac", "locked", "account"]):
+                options = [
+                    "I've initiated the secure reset protocol. Please check your secondary device for 2FA verification.",
+                    "Identity verification required. I have queued a reset request with the Security Officer.",
+                    "Access denied due to credential expiration. Redirecting you to the identity portal..."
+                ]
+                response = random.choice(options)
 
-            # Ticket status
-            elif any(keyword in p_lower for keyword in ["ticket", "status", "request"]):
-                response += "Your active tickets: #9924 (Network Routing - In Progress). Estimated resolution: 15 minutes."
+            # 3. Software / Installation
+            elif any(k in p_lower for k in ["software", "install", "application", "program", "download"]):
+                options = [
+                    f"Software request logged. Verifying your authorization level... Ticket **{ticket_id}** created.",
+                    "I will push the installer to your device within 5 minutes after security clearance.",
+                    f"Checking NMCI approved software list. Request queued as **{ticket_id}**."
+                ]
+                response = random.choice(options)
 
-            # Default fallback
+            # 4. Crash / Failure (Predictive Support)
+            elif any(k in p_lower for k in ["crash", "fail", "error", "broken", "stopped", "freeze"]):
+                response = f"⚠️ **PREDICTIVE ALERT:** Logs indicate a memory leak in Server Cluster Alpha. I recommend a preemptive service restart to prevent total outage. Ticket **{ticket_id}** logged."
+
+            # 5. Ticket Status
+            elif any(k in p_lower for k in ["ticket", "status"]):
+                options = [
+                    f"Your most recent ticket is **{ticket_id}** (Status: In Progress). Estimated resolution: 15 minutes.",
+                    "Checking active tickets... You have 1 open request with Tier 2 support.",
+                    f"Ticket **{ticket_id}** has been escalated to the Watch Officer for expedited handling."
+                ]
+                response = random.choice(options)
+
+            # 6. Fallback
             else:
-                response += "I am routing this request to the Watch Officer. Estimated wait time: 4 minutes."
+                options = [
+                    f"Request logged. Routing to Tier 2 support. Ticket **{ticket_id}**.",
+                    "I am processing your query against the knowledge base...",
+                    "Stand by. Verifying authorization level...",
+                    f"I have created **{ticket_id}** and notified the on-duty technician."
+                ]
+                response = random.choice(options)
 
-            time.sleep(0.5)
+            time.sleep(0.7)  # Slightly longer delay feels more "thinking"
             st.session_state.messages.append({"role": "assistant", "content": response})
             with st.chat_message("assistant"):
                 st.markdown(response)
